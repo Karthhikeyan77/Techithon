@@ -1,0 +1,198 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global default-deny safety net
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Connection check document (read-only)
+    match /test/connection {
+      allow get: if true;
+      allow list, write: if false;
+    }
+
+    // Global hardened helpers
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null && request.auth.token.email_verified == true;
+    }
+
+    function isOwner(uid) {
+      return isSignedIn() && request.auth.uid == uid;
+    }
+
+    function isAdmin() {
+      return isSignedIn() && (
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        request.auth.token.email == 'karthibalakrishnan1201@gmail.com'
+      );
+    }
+
+    // Validation blueprint: User
+    function isValidUser(data) {
+      return data.keys().hasAll(['uid', 'email', 'role', 'createdAt'])
+        && data.keys().hasOnly(['uid', 'email', 'displayName', 'role', 'createdAt', 'updatedAt'])
+        && isValidId(data.uid)
+        && data.uid == request.auth.uid
+        && data.email is string && data.email.size() >= 3 && data.email.size() <= 254
+        && (!('displayName' in data) || (data.displayName is string && data.displayName.size() <= 120))
+        && data.role == 'host'
+        && data.createdAt is timestamp;
+    }
+
+    match /users/{userId} {
+      allow get: if isValidId(userId) && (isOwner(userId) || isAdmin());
+      allow list: if false;
+      allow create: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(userId)
+        && isOwner(userId)
+        && isValidUser(incoming())
+        && incoming().uid == existing().uid
+        && incoming().role == existing().role
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly(['displayName', 'email', 'updatedAt'])
+        && (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow delete: if false;
+    }
+
+    // Validation blueprint: Room
+    function isValidRoom(data) {
+      return data.keys().hasAll(['id', 'hostUid', 'name', 'eventName', 'code', 'status', 'startingCoins', 'createdAt', 'updatedAt'])
+        && data.keys().hasOnly([
+          'id', 'hostUid', 'name', 'eventName', 'description', 'code', 'status',
+          'startingCoins', 'auctionDurationSec', 'answerDurationSec',
+          'correctPoints', 'incorrectDeduction', 'maxTeams', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.hostUid)
+        && data.hostUid == request.auth.uid
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.eventName is string && data.eventName.size() >= 1 && data.eventName.size() <= 120
+        && (!('description' in data) || (data.description is string && data.description.size() <= 600))
+        && data.code is string && data.code.size() >= 4 && data.code.size() <= 16 && data.code.matches('^[A-Z0-9\\-]+$')
+        && data.status in ['DRAFT', 'READY', 'LIVE', 'COMPLETED']
+        && data.startingCoins is number && data.startingCoins >= 0 && data.startingCoins <= 1000000
+        && (!('auctionDurationSec' in data) || (data.auctionDurationSec is number && data.auctionDurationSec >= 5 && data.auctionDurationSec <= 600))
+        && (!('answerDurationSec' in data) || (data.answerDurationSec is number && data.answerDurationSec >= 5 && data.answerDurationSec <= 600))
+        && (!('correctPoints' in data) || (data.correctPoints is number && data.correctPoints >= 0 && data.correctPoints <= 10000))
+        && (!('incorrectDeduction' in data) || (data.incorrectDeduction is number && data.incorrectDeduction >= 0 && data.incorrectDeduction <= 10000))
+        && (!('maxTeams' in data) || (data.maxTeams is number && data.maxTeams >= 2 && data.maxTeams <= 200))
+        && data.createdAt is timestamp
+        && data.updatedAt is timestamp;
+    }
+
+    match /rooms/{roomId} {
+      allow get: if isValidId(roomId) && (isOwner(existing().hostUid) || isAdmin());
+      allow list: if isSignedIn() && existing().hostUid == request.auth.uid;
+      allow create: if isValidId(roomId)
+        && isSignedIn()
+        && isValidRoom(incoming())
+        && incoming().id == roomId
+        && incoming().createdAt == request.time
+        && incoming().updatedAt == request.time;
+      allow update: if isValidId(roomId)
+        && isSignedIn()
+        && isValidRoom(incoming())
+        && (isOwner(existing().hostUid) || isAdmin())
+        && incoming().id == existing().id
+        && incoming().hostUid == existing().hostUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().updatedAt == request.time
+        && existing().status != 'COMPLETED'
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'eventName', 'description', 'status', 'startingCoins',
+          'auctionDurationSec', 'answerDurationSec', 'correctPoints',
+          'incorrectDeduction', 'maxTeams', 'updatedAt'
+        ]);
+      allow delete: if isValidId(roomId) && (isOwner(existing().hostUid) || isAdmin());
+    }
+
+    // Validation blueprint: QuestionBankItem (contains private correctAnswer)
+    function isValidQuestionBankItem(data) {
+      return data.keys().hasAll(['id', 'hostUid', 'name', 'category', 'difficulty', 'description', 'question', 'correctAnswer', 'startingBid', 'createdAt'])
+        && data.keys().hasOnly([
+          'id', 'hostUid', 'name', 'category', 'difficulty', 'description',
+          'question', 'correctAnswer', 'explanation', 'startingBid', 'createdAt', 'updatedAt'
+        ])
+        && isValidId(data.id)
+        && isValidId(data.hostUid)
+        && data.hostUid == request.auth.uid
+        && data.name is string && data.name.size() >= 1 && data.name.size() <= 120
+        && data.category is string && data.category.size() >= 1 && data.category.size() <= 64
+        && data.difficulty in ['Easy', 'Medium', 'Hard']
+        && data.description is string && data.description.size() >= 1 && data.description.size() <= 600
+        && data.question is string && data.question.size() >= 1 && data.question.size() <= 1000
+        && data.correctAnswer is string && data.correctAnswer.size() >= 1 && data.correctAnswer.size() <= 1000
+        && (!('explanation' in data) || (data.explanation is string && data.explanation.size() <= 1500))
+        && data.startingBid is number && data.startingBid >= 0 && data.startingBid <= 100000
+        && data.createdAt is timestamp;
+    }
+
+    match /questionBankItems/{itemId} {
+      allow get: if isValidId(itemId) && (isOwner(existing().hostUid) || isAdmin());
+      allow list: if isSignedIn() && existing().hostUid == request.auth.uid;
+      allow create: if isValidId(itemId)
+        && isSignedIn()
+        && isValidQuestionBankItem(incoming())
+        && incoming().id == itemId
+        && incoming().createdAt == request.time;
+      allow update: if isValidId(itemId)
+        && isSignedIn()
+        && isValidQuestionBankItem(incoming())
+        && (isOwner(existing().hostUid) || isAdmin())
+        && incoming().id == existing().id
+        && incoming().hostUid == existing().hostUid
+        && incoming().createdAt == existing().createdAt
+        && incoming().diff(existing()).affectedKeys().hasOnly([
+          'name', 'category', 'difficulty', 'description',
+          'question', 'correctAnswer', 'explanation', 'startingBid', 'updatedAt'
+        ])
+        && (!('updatedAt' in incoming()) || incoming().updatedAt == request.time);
+      allow delete: if isValidId(itemId) && (isOwner(existing().hostUid) || isAdmin());
+    }
+
+    // Validation blueprint: AuctionArchive (immutable once created)
+    function isValidAuctionArchive(data) {
+      return data.keys().hasAll(['id', 'hostUid', 'roomId', 'roomName', 'totalTeams', 'totalItems', 'completedAt'])
+        && data.keys().hasOnly(['id', 'hostUid', 'roomId', 'roomName', 'winnerTeamName', 'winnerPoints', 'totalTeams', 'totalItems', 'completedAt'])
+        && isValidId(data.id)
+        && isValidId(data.hostUid)
+        && isValidId(data.roomId)
+        && data.hostUid == request.auth.uid
+        && data.roomName is string && data.roomName.size() >= 1 && data.roomName.size() <= 120
+        && (!('winnerTeamName' in data) || (data.winnerTeamName is string && data.winnerTeamName.size() <= 120))
+        && (!('winnerPoints' in data) || (data.winnerPoints is number && data.winnerPoints >= 0))
+        && data.totalTeams is number && data.totalTeams >= 0 && data.totalTeams <= 500
+        && data.totalItems is number && data.totalItems >= 0 && data.totalItems <= 500
+        && data.completedAt is timestamp;
+    }
+
+    match /auctionArchives/{archiveId} {
+      allow get: if isValidId(archiveId) && (isOwner(existing().hostUid) || isAdmin());
+      allow list: if isSignedIn() && existing().hostUid == request.auth.uid;
+      allow create: if isValidId(archiveId)
+        && isSignedIn()
+        && isValidAuctionArchive(incoming())
+        && incoming().id == archiveId
+        && incoming().completedAt == request.time;
+      allow update: if false;
+      allow delete: if isValidId(archiveId) && (isOwner(existing().hostUid) || isAdmin());
+    }
+  }
+}

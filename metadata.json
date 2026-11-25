@@ -1,0 +1,6 @@
+{
+  "name": "TECH AUCTION — TECHITHON",
+  "description": "THINK. BID. CONQUER. Real-time team technology auction competition platform for TECHITHON.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

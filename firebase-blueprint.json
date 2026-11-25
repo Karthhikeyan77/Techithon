@@ -1,0 +1,94 @@
+{
+  "entities": {
+    "User": {
+      "title": "User",
+      "description": "Authenticated host profile stored in Firestore",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "email": { "type": "string", "minLength": 3, "maxLength": 254 },
+        "displayName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "role": { "type": "string", "enum": ["host", "admin"] },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["uid", "email", "role", "createdAt"]
+    },
+    "Room": {
+      "title": "Room",
+      "description": "Custom auction room configuration owned by a host",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "hostUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "eventName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "description": { "type": "string", "maxLength": 600 },
+        "code": { "type": "string", "minLength": 4, "maxLength": 16, "pattern": "^[A-Z0-9\\-]+$" },
+        "status": { "type": "string", "enum": ["DRAFT", "READY", "LIVE", "COMPLETED"] },
+        "startingCoins": { "type": "number" },
+        "auctionDurationSec": { "type": "number" },
+        "answerDurationSec": { "type": "number" },
+        "correctPoints": { "type": "number" },
+        "incorrectDeduction": { "type": "number" },
+        "maxTeams": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "hostUid", "name", "eventName", "code", "status", "startingCoins", "createdAt", "updatedAt"]
+    },
+    "QuestionBankItem": {
+      "title": "QuestionBankItem",
+      "description": "Reusable auction object and technical question owned by a host",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "hostUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "name": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "category": { "type": "string", "minLength": 1, "maxLength": 64 },
+        "difficulty": { "type": "string", "enum": ["Easy", "Medium", "Hard"] },
+        "description": { "type": "string", "minLength": 1, "maxLength": 600 },
+        "question": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "correctAnswer": { "type": "string", "minLength": 1, "maxLength": 1000 },
+        "explanation": { "type": "string", "maxLength": 1500 },
+        "startingBid": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "hostUid", "name", "category", "difficulty", "description", "question", "correctAnswer", "startingBid", "createdAt"]
+    },
+    "AuctionArchive": {
+      "title": "AuctionArchive",
+      "description": "Completed auction room summary owned by a host",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "hostUid": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "roomId": { "type": "string", "minLength": 1, "maxLength": 128, "pattern": "^[a-zA-Z0-9_\\-]+$" },
+        "roomName": { "type": "string", "minLength": 1, "maxLength": 120 },
+        "winnerTeamName": { "type": "string", "maxLength": 120 },
+        "winnerPoints": { "type": "number" },
+        "totalTeams": { "type": "number" },
+        "totalItems": { "type": "number" },
+        "completedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["id", "hostUid", "roomId", "roomName", "totalTeams", "totalItems", "completedAt"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": { "$ref": "#/entities/User" },
+      "description": "Host profile documents isolated per user"
+    },
+    "/rooms/{roomId}": {
+      "schema": { "$ref": "#/entities/Room" },
+      "description": "Host auction room configurations"
+    },
+    "/questionBankItems/{itemId}": {
+      "schema": { "$ref": "#/entities/QuestionBankItem" },
+      "description": "Host custom auction items and technical questions"
+    },
+    "/auctionArchives/{archiveId}": {
+      "schema": { "$ref": "#/entities/AuctionArchive" },
+      "description": "Completed event summaries owned by hosts"
+    }
+  }
+}
