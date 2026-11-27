@@ -449,11 +449,11 @@ export class AuctionEngine {
           input.deductWinningBid ? 1 : 0,
           input.allowManualCoinAdjust ? 1 : 0,
           input.auctionDurationSec,
-          input.maxAuctionDurationSec,
+          input.maxAuctionDurationSec || 600,
           input.startingBidDefault,
           input.allowMultipleBids ? 1 : 0,
           input.allowRebidAfterOutbid ? 1 : 0,
-          input.autoCloseOnExpire ? 1 : 0,
+          input.autoCloseOnExpire !== false ? 1 : 0,
           input.answerDurationSec,
           input.correctPoints,
           input.incorrectDeduction,
@@ -1061,7 +1061,9 @@ export class AuctionEngine {
           throw new EngineError('This item has already been scored. Select the next item.', 409);
         }
 
-        const durationSec = Math.min(room.maxAuctionDurationSec, Math.max(5, room.auctionDurationSec));
+        const configuredSec = Number(room.auctionDurationSec) > 0 ? Number(room.auctionDurationSec) : 30;
+        const maxAllowedSec = Number(room.maxAuctionDurationSec) >= 5 ? Number(room.maxAuctionDurationSec) : 600;
+        const durationSec = Math.max(5, Math.min(maxAllowedSec, configuredSec));
         const deadlineAt = now + durationSec * 1000;
         const itemId = String(item.id);
 
@@ -1344,7 +1346,8 @@ export class AuctionEngine {
         const item = this.db.prepare('SELECT time_limit_override_sec FROM room_items WHERE id = ?').get(state.currentItemId) as {
           time_limit_override_sec: number | null;
         };
-        const answerSec = item?.time_limit_override_sec ?? room.answerDurationSec;
+        const rawAnswerSec = Number(item?.time_limit_override_sec ?? room.answerDurationSec);
+        const answerSec = Number.isFinite(rawAnswerSec) && rawAnswerSec >= 5 ? rawAnswerSec : 30;
         const answerDeadline = now + answerSec * 1000;
 
         this.db.prepare(`UPDATE room_items SET status = 'QUESTION_REVEALED' WHERE id = ?`).run(state.currentItemId);

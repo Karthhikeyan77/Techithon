@@ -28,14 +28,24 @@ export function CountdownClock({
     return () => clearInterval(id);
   }, [isPaused, deadlineAt]);
 
+  const normalizedDeadlineMs =
+    deadlineAt && deadlineAt > 0
+      ? deadlineAt < 1e12
+        ? deadlineAt * 1000
+        : deadlineAt
+      : null;
+
   const rawRemainingMs = isPaused
     ? Math.max(0, remainingMsWhenPaused ?? 0)
-    : deadlineAt
-      ? Math.max(0, deadlineAt - (nowMs + serverOffsetMs))
+    : normalizedDeadlineMs
+      ? Math.max(0, normalizedDeadlineMs - (nowMs + serverOffsetMs))
       : 0;
 
   const secondsLeft = Math.ceil(rawRemainingMs / 1000);
-  const progressPct = Math.min(100, Math.max(0, (rawRemainingMs / Math.max(1000, totalDurationSec * 1000)) * 100));
+  const progressPct = Math.min(
+    100,
+    Math.max(0, (rawRemainingMs / Math.max(1000, totalDurationSec * 1000)) * 100),
+  );
 
   const isCritical = secondsLeft <= 5 && rawRemainingMs > 0;
   const isWarning = secondsLeft <= 10 && secondsLeft > 5;
@@ -67,7 +77,11 @@ export function CountdownClock({
     <div className="space-y-2">
       <div className="flex items-center justify-between gap-3">
         <span className="inline-flex items-center gap-1.5 text-xs font-medium text-[#9BB0CA]">
-          {isPaused ? <Pause className="w-3.5 h-3.5 text-[#FFC857]" /> : <Clock className="w-3.5 h-3.5 text-[#51D6E8]" />}
+          {isPaused ? (
+            <Pause className="w-3.5 h-3.5 text-[#FFC857]" />
+          ) : (
+            <Clock className="w-3.5 h-3.5 text-[#51D6E8]" />
+          )}
           {label}
           {isPaused && ' (Paused)'}
         </span>
